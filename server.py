@@ -134,3 +134,100 @@ def handle_upload(conn, client_pub, session_aes_key, fname):
     except Exception as e:
         send_msg(conn, "FAIL", str(e).encode())
         print("[UPLOAD ERROR]", e)
+
+        def handle_download(conn, session_aes_key, fname):
+    """
+    Handles file download request from client.
+
+    Important:
+    - The file in storage is encrypted.
+    - Server loads the encrypted AES key from .key file.
+    - Server decrypts that AES key using server private RSA key.
+    - Server uses the same AES key to decrypt the stored file.
+    - Then server re-encrypts plaintext with current session AES key for transfer.
+    """
+
+    try:
+        file_path = encrypted_file_path(fname)
+        key_path = encrypted_key_path(fname)
+
+        if not os.path.exists(file_path):
+            send_msg(conn, "FAIL", b"File not found.")
+            print(f"[DOWNLOAD] File not found: {file_path}")
+            return
+
+        if not os.path.exists(key_path):
+            send_msg(conn, "FAIL", b"Encryption key file not found.")
+            print(f"[DOWNLOAD] Key file not found: {key_path}")
+            return
+
+        # Read encrypted file from storage
+        with open(file_path, "rb") as f:
+            encrypted_for_storage = f.read()
+
+        # Read encrypted AES key
+        with open(key_path, "rb") as f:
+            encrypted_file_aes_key = f.read()
+
+        # Decrypt the AES key using server private RSA key
+        file_aes_key = rsa_decrypt(srv_priv, encrypted_file_aes_key)
+
+        # Decrypt the stored file using the same AES key used during upload
+        plaintext_data = aes_decrypt(file_aes_key, encrypted_for_storage)
+
+        # Create hash and signature for integrity/authentication
+        file_hash = sha256(plaintext_data)
+        sig = sign(srv_priv, file_hash)
+
+        # Encrypt plaintext again with session AES key before sending to client
+        encrypted_for_transfer = aes_encrypt(session_aes_key, plaintext_data)
+
+        send_msg(conn, "START")
+        send_msg(conn, "SIGN", sig)
+        send_msg(conn, "HASH", file_hash)
+
+        for i in range(0, len(encrypted_for_transfer), CHUNK):
+            send_msg(conn, "CHUNK", encrypted_for_transfer[i:i + CHUNK])
+
+        send_msg(conn, "END")
+
+        print(f"[DOWNLOAD] Encrypted file decrypted from storage and sent: {file_path}")
+
+    except Exception as e:
+        send_msg(conn, "FAIL", str(e).encode())
+        print("[DOWNLOAD ERROR]", e)
+
+
+def handle_client(conn, addr):
+    """
+    Handles one client connection.
+    """
+
+    print(f"[CONNECTED] Client connected from {addr}")
+
+    try:
+          # =========================
+        # KEY EXCHANGE
+        # =========================
+
+        send_msg(conn, "SERVER_PUB", serialize_pub(srv_pub))
+
+        tag, client_pub_pem = recv_msg(conn)
+
+        if tag != "CLIENT_PUB":
+            send_msg(conn, "FAIL", b"Expected client public key.")
+            return
+
+        client_pub = load_pub(client_pub_pem)
+
+        tag, enc_session_aes = recv_msg(conn)
+
+        if tag != "AES_KEY":
+            send_msg(conn, "FAIL", b"Expected AES session key.")
+            return
+
+        session_aes_key = rsa_decrypt(srv_priv, enc_session_aes)
+
+        send_msg(conn, "ACK", b"Key exchange successful.")
+
+        print("[KEY EXCHANGE] Completed successfully.")
