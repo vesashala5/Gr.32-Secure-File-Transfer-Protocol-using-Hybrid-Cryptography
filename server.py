@@ -231,3 +231,52 @@ def handle_client(conn, addr):
         send_msg(conn, "ACK", b"Key exchange successful.")
 
         print("[KEY EXCHANGE] Completed successfully.")
+         # =========================
+        # REQUEST
+        # =========================
+
+        tag, fname_data = recv_msg(conn)
+        fname = os.path.basename(fname_data.decode())
+
+        if tag == "UPLOAD":
+            handle_upload(conn, client_pub, session_aes_key, fname)
+
+        elif tag == "DOWNLOAD":
+            handle_download(conn, session_aes_key, fname)
+
+        else:
+            send_msg(conn, "FAIL", b"Invalid request type.")
+
+    except Exception as e:
+        print("[CLIENT ERROR]", e)
+
+        try:
+            send_msg(conn, "FAIL", str(e).encode())
+        except Exception:
+            pass
+
+    finally:
+        conn.close()
+        print(f"[DISCONNECTED] Client disconnected from {addr}")
+
+
+def start_server():
+    """
+    Starts the secure file transfer server.
+    """
+
+    print("Secure File Transfer Server is running...")
+    print(f"Listening on {HOST}:{PORT}")
+    print("Awaiting client connections...")
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((HOST, PORT))
+        s.listen()
+
+        while True:
+            conn, addr = s.accept()
+            handle_client(conn, addr)
+
+
+if __name__ == "__main__":
+    start_server()
