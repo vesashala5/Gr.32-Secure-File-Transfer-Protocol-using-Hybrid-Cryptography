@@ -98,3 +98,105 @@ def upload_file(s, cli_priv, aes_key):
         print(f"File '{name}' encrypted and sent successfully.")
     else:
         print("Upload failed:", msg.decode(errors="ignore"))
+
+def download_file(s, srv_pub, aes_key):
+    """
+    Downloads a file securely from the server.
+    """
+
+    name = input("Enter filename to download: ").strip()
+
+    send_msg(s, "DOWNLOAD", name.encode())
+
+    tag, msg = recv_msg(s)
+
+    if tag == "FAIL":
+        print("Download failed:", msg.decode(errors="ignore"))
+        return
+
+    if tag != "START":
+        print("Invalid server response.")
+        return
+
+    # Receive server signature and hash
+    _, sig = recv_msg(s)
+    _, file_hash = recv_msg(s)
+
+    encrypted = b''
+
+    while True:
+        tag, chunk = recv_msg(s)
+
+        if tag == "END":
+            break
+
+        if tag == "FAIL":
+            print("Download failed:", chunk.decode(errors="ignore"))
+            return
+
+        if tag != "CHUNK":
+            print("Invalid chunk received.")
+            return
+
+        encrypted += chunk
+
+    # Decrypt file
+    data = aes_decrypt(aes_key, encrypted)
+
+    # Verify server signature and file integrity
+    valid_signature = verify(srv_pub, sig, file_hash)
+    valid_hash = sha256(data) == file_hash
+
+    if not valid_signature:
+        print("Download failed: server signature verification failed.")
+        return
+
+    if not valid_hash:
+        print("Download failed: file integrity check failed.")
+        return
+
+    out_file = "downloaded_" + name
+
+    with open(out_file, "wb") as f:
+        f.write(data)
+
+    print(f"File downloaded and verified successfully.")
+    print(f"Downloaded as: {out_file}")
+
+
+def main():
+    try:
+        s, cli_priv, srv_pub, aes_key = connect_and_exchange_keys()
+
+        print()
+        print("1. Upload file")
+        print("2. Download file")
+
+        choice = input("Choose option: ").strip()
+
+        if choice == "1":
+            upload_file(s, cli_priv, aes_key)
+
+        elif choice == "2":
+            download_file(s, srv_pub, aes_key)
+
+        else:
+            print("Invalid option.")
+
+        s.close()
+
+    except ConnectionRefusedError:
+        print("Could not connect to server. Make sure server.py is running first.")
+
+    except Exception as e:
+        print("Error:", e)
+
+    finally:
+        try:
+            s.close()
+        except Exception:
+            pass
+
+
+if __name__ == "__main__":
+    main()
