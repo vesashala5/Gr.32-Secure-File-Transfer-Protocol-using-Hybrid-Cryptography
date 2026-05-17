@@ -135,7 +135,8 @@ def handle_upload(conn, client_pub, session_aes_key, fname):
         send_msg(conn, "FAIL", str(e).encode())
         print("[UPLOAD ERROR]", e)
 
-        def handle_download(conn, session_aes_key, fname):
+
+def handle_download(conn, session_aes_key, fname):
     """
     Handles file download request from client.
 
@@ -206,7 +207,7 @@ def handle_client(conn, addr):
     print(f"[CONNECTED] Client connected from {addr}")
 
     try:
-          # =========================
+        # =========================
         # KEY EXCHANGE
         # =========================
 
@@ -231,7 +232,8 @@ def handle_client(conn, addr):
         send_msg(conn, "ACK", b"Key exchange successful.")
 
         print("[KEY EXCHANGE] Completed successfully.")
-         # =========================
+
+        # =========================
         # REQUEST
         # =========================
 
