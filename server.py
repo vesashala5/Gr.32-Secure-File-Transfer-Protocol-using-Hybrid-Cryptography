@@ -48,3 +48,17 @@ def load_or_create_server_keys():
 
 # Server RSA keys
 srv_priv, srv_pub = load_or_create_server_keys()
+
+def encrypted_file_path(fname):
+    """
+    Path where the encrypted uploaded file is stored.
+    """
+    return os.path.join(STORAGE_DIR, fname)
+
+
+def encrypted_key_path(fname):
+    """
+    Path where the AES key for that file is stored.
+    The AES key itself is encrypted using the server public key.
+    """
+    return os.path.join(STORAGE_DIR, fname + ".key")
