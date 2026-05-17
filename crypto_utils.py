@@ -52,3 +52,16 @@ def load_priv(pem):
         pem,
         password=None
     )
+
+def rsa_encrypt(pub, data):
+    """
+    Encrypts small data, such as AES key, using RSA OAEP.
+    """
+    return pub.encrypt(
+        data,
+        padding.OAEP(
+            mgf=padding.MGF1(hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
