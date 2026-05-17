@@ -56,3 +56,45 @@ def connect_and_exchange_keys():
     print("AES key encrypted and sent successfully.")
 
     return s, cli_priv, srv_pub, aes_key
+
+def upload_file(s, cli_priv, aes_key):
+    """
+    Uploads a file securely to the server.
+    """
+
+    path = input("Enter file path for upload: ").strip()
+
+    if not os.path.exists(path):
+        print("File does not exist.")
+        return
+
+    name = os.path.basename(path)
+
+    with open(path, "rb") as f:
+        data = f.read()
+
+    # Encrypt file with AES
+    encrypted = aes_encrypt(aes_key, data)
+
+    # Generate hash and sign it with client's private key
+    file_hash = sha256(data)
+    sig = sign(cli_priv, file_hash)
+
+    # Send upload request
+    send_msg(s, "UPLOAD", name.encode())
+    send_msg(s, "SIGN", sig)
+    send_msg(s, "HASH", file_hash)
+
+    # Send encrypted file chunks
+    for i in range(0, len(encrypted), CHUNK):
+        send_msg(s, "CHUNK", encrypted[i:i + CHUNK])
+
+    send_msg(s, "END")
+
+    # Receive result
+    tag, msg = recv_msg(s)
+
+    if tag == "SUCCESS":
+        print(f"File '{name}' encrypted and sent successfully.")
+    else:
+        print("Upload failed:", msg.decode(errors="ignore"))
