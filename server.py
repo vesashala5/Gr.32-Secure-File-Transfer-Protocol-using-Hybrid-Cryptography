@@ -14,6 +14,7 @@ SERVER_PUBLIC_KEY_FILE = "server_public.pem"
 
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
+
 def load_or_create_server_keys():
     """
     Loads server RSA keys if they already exist.
@@ -49,6 +50,7 @@ def load_or_create_server_keys():
 # Server RSA keys
 srv_priv, srv_pub = load_or_create_server_keys()
 
+
 def encrypted_file_path(fname):
     """
     Path where the encrypted uploaded file is stored.
@@ -62,6 +64,7 @@ def encrypted_key_path(fname):
     The AES key itself is encrypted using the server public key.
     """
     return os.path.join(STORAGE_DIR, fname + ".key")
+
 
 def handle_upload(conn, client_pub, session_aes_key, fname):
     """
@@ -92,8 +95,10 @@ def handle_upload(conn, client_pub, session_aes_key, fname):
 
             encrypted_from_client += chunk
 
+        # Decrypt file received from client using session AES key
         plaintext_data = aes_decrypt(session_aes_key, encrypted_from_client)
 
+        # Verify integrity and authenticity
         valid_signature = verify(client_pub, sig, file_hash)
         valid_hash = sha256(plaintext_data) == file_hash
 
@@ -102,16 +107,21 @@ def handle_upload(conn, client_pub, session_aes_key, fname):
             print("[UPLOAD] Verification failed.")
             return
 
+        # Generate a new AES key specifically for storage
         file_aes_key = gen_aes()
 
+        # Encrypt file for storage
         encrypted_for_storage = aes_encrypt(file_aes_key, plaintext_data)
 
+        # Protect the file AES key with server public RSA key
         encrypted_file_aes_key = rsa_encrypt(srv_pub, file_aes_key)
 
+        # Save encrypted file
         file_path = encrypted_file_path(fname)
         with open(file_path, "wb") as f:
             f.write(encrypted_for_storage)
 
+        # Save encrypted AES key
         key_path = encrypted_key_path(fname)
         with open(key_path, "wb") as f:
             f.write(encrypted_file_aes_key)
@@ -124,4 +134,3 @@ def handle_upload(conn, client_pub, session_aes_key, fname):
     except Exception as e:
         send_msg(conn, "FAIL", str(e).encode())
         print("[UPLOAD ERROR]", e)
-        
