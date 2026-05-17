@@ -62,3 +62,66 @@ def encrypted_key_path(fname):
     The AES key itself is encrypted using the server public key.
     """
     return os.path.join(STORAGE_DIR, fname + ".key")
+
+def handle_upload(conn, client_pub, session_aes_key, fname):
+    """
+    Handles encrypted file upload from client.
+
+    Important:
+    - The file arrives encrypted with the session AES key.
+    - Server decrypts it only to verify integrity/signature.
+    - Then server encrypts it again with a new file AES key for storage.
+    - The same file AES key is saved encrypted with server RSA public key.
+    """
+
+    try:
+        _, sig = recv_msg(conn)
+        _, file_hash = recv_msg(conn)
+
+        encrypted_from_client = b''
+
+        while True:
+            tag, chunk = recv_msg(conn)
+
+            if tag == "END":
+                break
+
+            if tag != "CHUNK":
+                send_msg(conn, "FAIL", b"Invalid chunk received.")
+                return
+
+            encrypted_from_client += chunk
+
+        plaintext_data = aes_decrypt(session_aes_key, encrypted_from_client)
+
+        valid_signature = verify(client_pub, sig, file_hash)
+        valid_hash = sha256(plaintext_data) == file_hash
+
+        if not valid_signature or not valid_hash:
+            send_msg(conn, "FAIL", b"File verification failed.")
+            print("[UPLOAD] Verification failed.")
+            return
+
+        file_aes_key = gen_aes()
+
+        encrypted_for_storage = aes_encrypt(file_aes_key, plaintext_data)
+
+        encrypted_file_aes_key = rsa_encrypt(srv_pub, file_aes_key)
+
+        file_path = encrypted_file_path(fname)
+        with open(file_path, "wb") as f:
+            f.write(encrypted_for_storage)
+
+        key_path = encrypted_key_path(fname)
+        with open(key_path, "wb") as f:
+            f.write(encrypted_file_aes_key)
+
+        send_msg(conn, "SUCCESS", b"Encrypted file uploaded and stored successfully.")
+
+        print(f"[UPLOAD] Encrypted file stored: {file_path}")
+        print(f"[UPLOAD] Encrypted AES key stored: {key_path}")
+
+    except Exception as e:
+        send_msg(conn, "FAIL", str(e).encode())
+        print("[UPLOAD ERROR]", e)
+        
