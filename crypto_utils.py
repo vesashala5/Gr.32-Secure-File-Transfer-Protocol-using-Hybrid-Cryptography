@@ -65,3 +65,102 @@ def rsa_encrypt(pub, data):
             label=None
         )
     )
+
+def rsa_decrypt(priv, data):
+    """
+    Decrypts data encrypted with the matching RSA public key.
+    """
+    return priv.decrypt(
+        data,
+        padding.OAEP(
+            mgf=padding.MGF1(hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+
+
+
+def gen_aes():
+    """
+    Generates a random 256-bit AES key.
+    """
+    return os.urandom(32)
+
+
+def aes_encrypt(key, data):
+    """
+    Encrypts data using AES-CFB.
+    The IV is prepended to the encrypted data.
+    """
+    iv = os.urandom(16)
+
+    cipher = Cipher(
+        algorithms.AES(key),
+        modes.CFB(iv)
+    )
+
+    encryptor = cipher.encryptor()
+    encrypted = encryptor.update(data) + encryptor.finalize()
+
+    return iv + encrypted
+
+
+def aes_decrypt(key, data):
+    """
+    Decrypts AES-CFB encrypted data.
+    The first 16 bytes are the IV.
+    """
+    iv = data[:16]
+    encrypted = data[16:]
+
+    cipher = Cipher(
+        algorithms.AES(key),
+        modes.CFB(iv)
+    )
+
+    decryptor = cipher.decryptor()
+
+    return decryptor.update(encrypted) + decryptor.finalize()
+
+
+def sha256(data):
+    """
+    Generates SHA-256 hash.
+    """
+    h = hashes.Hash(hashes.SHA256())
+    h.update(data)
+    return h.finalize()
+
+
+def sign(priv, data):
+    """
+    Signs data using RSA-PSS.
+    """
+    return priv.sign(
+        data,
+        padding.PSS(
+            mgf=padding.MGF1(hashes.SHA256()),
+            salt_length=padding.PSS.MAX_LENGTH
+        ),
+        hashes.SHA256()
+    )
+
+
+def verify(pub, sig, data):
+    """
+    Verifies RSA-PSS signature.
+    """
+    try:
+        pub.verify(
+            sig,
+            data,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+        return True
+    except Exception:
+        return False
